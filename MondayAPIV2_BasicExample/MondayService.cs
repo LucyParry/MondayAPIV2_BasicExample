@@ -21,7 +21,7 @@ namespace MondayAPIV2_BasicExample
         /// </summary>
         private string GetResponseData(string query)
         {
-            StringContent content = new StringContent(this.GetQueryContentBody(query), Encoding.UTF8, "application/json");
+            StringContent content = new StringContent(query, Encoding.UTF8, "application/json");
             using (var response = _mondayClient.PostAsync("", content))
             {
                 if (!response.Result.IsSuccessStatusCode)
@@ -35,7 +35,7 @@ namespace MondayAPIV2_BasicExample
         /// <summary>
         /// Get the 'data' node from a GraphQL response if it exists and no errors occurred, else throw a HttpException.
         /// </summary>
-        private dynamic ParseGraphQLResponse(string responseString, string collectionKey)
+        private dynamic ParseGraphQLResponse(string responseString, string collectionKey = "")
         {
             JObject responseObject = JObject.Parse(responseString);
 
@@ -49,16 +49,12 @@ namespace MondayAPIV2_BasicExample
             {
                 throw new JsonException("The request was successful but contained no data");
             }
-            dynamic data = JsonConvert.DeserializeObject<dynamic>(responseObject["data"][collectionKey].ToString());
-            return data;
-        }
 
-        /// <summary>
-        /// Add a GraphQL query statement into JSON with 'query' key ready to be sent in the body of a a HTTP POST
-        /// </summary>
-        private string GetQueryContentBody(string statement)
-        {
-            return "{ \"query\": \"" + RemoveNewlinesTabsReturns(statement) + "\" }";
+            dynamic data;
+            data = collectionKey == "" ? JsonConvert.DeserializeObject<dynamic>(responseObject["data"].ToString()) :
+                                         JsonConvert.DeserializeObject<dynamic>(responseObject["data"][collectionKey].ToString());
+
+            return data;
         }
 
         /// <summary>
@@ -66,13 +62,7 @@ namespace MondayAPIV2_BasicExample
         /// </summary>
         public List<Board> GetBoards()
         {
-            string query = @"{ 
-                                boards { 
-                                    id 
-                                    name
-                                }
-                             }";
-
+            string query = "{ \"query\": \"" + @"{ boards { id name } }" + "\" }";
             string response = GetResponseData(query);
             dynamic data = ParseGraphQLResponse(response, "boards");
             List<Board> boards = JsonConvert.DeserializeObject<List<Board>>(data.ToString());
@@ -84,20 +74,7 @@ namespace MondayAPIV2_BasicExample
         /// </summary>
         public Board GetBoardWithItems(int boardId)
         {
-            string query = @"{ boards(ids: " + boardId + ") { " +
-                                 @"name
-                                   items {
-                                       id
-                                       name
-                                       column_values {
-                                           id
-                                           value
-                                           title
-                                       }
-                                   }
-                               }
-                           }";
-
+            string query = "{ \"query\": \"" + @"{ boards(ids: " + boardId + ") { name items { id name column_values { id value title } } } }" + "\" }";
             string response = GetResponseData(query);
             dynamic data = ParseGraphQLResponse(response, "boards");
             List<Board> boards = JsonConvert.DeserializeObject<List<Board>>(data.ToString());
@@ -108,12 +85,18 @@ namespace MondayAPIV2_BasicExample
             return boards[0];
         }
 
-        /// <summary>
-        /// Helper to remove the newlines, tabs and returns added when setting out the query nicely
-        /// </summary>
-        public static string RemoveNewlinesTabsReturns(string inputString)
+
+
+        public dynamic ChangeTextColumnValue(int boardId, int itemId, string columnId, string columnValue)
         {
-            return inputString.Replace("\n", "").Replace("\r", "").Replace("\t", "");
+            string value = @"\\\""" + columnValue + @"\\\""";
+            string query = "{\"query\" : \"mutation { change_column_value(board_id: " + boardId + ", item_id: " + itemId + " , column_id: \\\"" + columnId + "\\\", value: \\\"" + value + "\\\") { id } }\"}";
+
+            string response = GetResponseData(query);
+            dynamic data = ParseGraphQLResponse(response, "");
+            return data;
         }
+
+
     }
 }
